@@ -1,0 +1,45 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+Vagrant::Config.run do |config|
+  config.vm.box = "mimic"
+  config.vm.box_url = "http://cloud-images.ubuntu.com/vagrant/trusty/current/trusty-server-cloudimg-amd64-vagrant-disk1.box"
+
+  config.vm.network :hostonly, "33.33.33.10"
+
+  config.vm.forward_port 8000, 8877
+  config.vm.forward_port 5432, 2345
+
+  config.vm.share_folder "site", "/var/www", "../sites/mimic"
+  config.vm.share_folder "build_deps", "/build", "../deploy"
+
+  # SALT STACK PROVISIONING
+  ## For masterless, mount your salt file root
+  config.vm.share_folder "salt_file_root", "/srv/salt", "salt"
+  ## Use all the defaults:
+  config.vm.provision :salt do |salt|
+    salt.run_highstate = true
+
+    ## Optional Settings:
+    salt.verbose = true
+    salt.minion_config = "salt/minion.conf"
+    salt.bootstrap_options = "-P"
+    # salt.temp_config_dir = "/existing/folder/on/basebox/"
+    # salt.salt_install_type = "git"
+    # salt.salt_install_args = "develop"
+
+    ## If you have a remote master setup, you can add
+    ## your preseeded minion key
+    #salt.minion_key = "salt/key/minion.pem"
+    #salt.minion_pub = "salt/key/minion.pub"
+  end
+end
+
+# Some config options for virtualbox, using v2 config style as it's
+# nicer for this part
+Vagrant.configure(2) do |config|
+  config.vm.provider "virtualbox" do |vb|
+    vb.memory = 2048
+    vb.name = "mimic"
+  end
+end
