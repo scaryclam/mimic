@@ -11,7 +11,5 @@ mimic_db:
     - present
     - name: mimic_vagrant
     - encoding: UTF8
-    - lc_collate: en_US.UTF8
-    - lc_ctype: en_US.UTF8
     - template: template1
     - user: postgres
