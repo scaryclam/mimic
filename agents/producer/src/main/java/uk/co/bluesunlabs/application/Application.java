@@ -18,6 +18,9 @@ import org.apache.http.client.methods.HttpPost;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.message.BasicNameValuePair;
 
+import uk.co.bluesunlabs.job.Job;
+import uk.co.bluesunlabs.job.JobFactory;
+
 import com.json.JSONArray;
 import com.json.JSONException;
 import com.json.JSONObject;
@@ -29,7 +32,7 @@ public class Application {
 	private Integer serverPort = 8877;
 	private static String agentId;
 	private Boolean isRegistered = false;
-	private JSONObject agentJobs;
+	private JSONArray agentJobs;
 	private static final String[] acceptedJobTypes = new String[]{"http_producer", "rabbit_producer"};
 	
 	private class NoJobsException extends Exception {
@@ -106,9 +109,12 @@ public class Application {
 		try {
 			JSONObject jobsData = new JSONObject(result.toString());
 			JSONArray jobs = jobsData.getJSONArray("jobs");
+			
 			if (jobs.length() < 1) {
 				System.out.println("No jobs found, will retry later");
 				throw new NoJobsException("No jobs found");
+			} else {
+				agentJobs = jobs; 
 			}
 			
 		} catch (JSONException error) {
@@ -117,9 +123,14 @@ public class Application {
 	}
 	
 	private void run() {
-		JSONArray jobConfig = new JSONArray();
-		JSONObject JobOneConfig = new JSONObject();
-		
+		// For each job in agentJobs, pull out the config, create a new job, and set a worker running the job
+		JobFactory factory = new JobFactory();
+		for (int index = 0; index < agentJobs.length(); index++) {
+            JSONObject jobConfig = agentJobs.getJSONObject(index);
+			Job job = factory.getJob(jobConfig);
+			Thread thread = new Thread(job);
+			thread.start();
+		}
 	}
 			
 	public static void main(String[] args) throws InterruptedException, JSONException, IOException {

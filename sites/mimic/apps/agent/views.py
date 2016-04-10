@@ -52,7 +52,12 @@ class AgentJobsRequestView(View):
         jobs = []
 
         for job in assigned_jobs:
-            jobs.append({'name': job.name})
+            job_data = {'name': job.name,
+                        'job_type': job.job_type.name}
+
+            for job_meta in job.jobmeta_set.all():
+                job_data[job_meta.key] = job_meta.value
+            jobs.append(job_data)
 
         agent_response_data = {'jobs': jobs}
         return HttpResponse(json.dumps(agent_response_data))

@@ -20,19 +20,19 @@ class Migration(migrations.Migration):
             ],
         ),
         migrations.CreateModel(
-            name='JobType',
-            fields=[
-                ('id', models.AutoField(verbose_name='ID', serialize=False, auto_created=True, primary_key=True)),
-                ('name', models.CharField(max_length=255)),
-            ],
-        ),
-        migrations.CreateModel(
-            name='JobTypeMeta',
+            name='JobMeta',
             fields=[
                 ('id', models.AutoField(verbose_name='ID', serialize=False, auto_created=True, primary_key=True)),
                 ('key', models.CharField(max_length=255)),
                 ('value', models.CharField(max_length=512)),
-                ('job_type', models.ForeignKey(to='job.JobType')),
+                ('job', models.ForeignKey(to='job.Job')),
+            ],
+        ),
+        migrations.CreateModel(
+            name='JobType',
+            fields=[
+                ('id', models.AutoField(verbose_name='ID', serialize=False, auto_created=True, primary_key=True)),
+                ('name', models.CharField(max_length=255)),
             ],
         ),
         migrations.AddField(

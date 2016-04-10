@@ -18,11 +18,10 @@ class JobType(models.Model):
         return "%s" % self.name
 
 
-class JobTypeMeta(models.Model):
+class JobMeta(models.Model):
     key = models.CharField(max_length=255)
     value = models.CharField(max_length=512)
-    job_type = models.ForeignKey('job.JobType')
+    job = models.ForeignKey('job.Job')
 
     def __unicode__(self):
-        agent_str = self.agent.agent_id if self.agent else "No Agent Assigned"
-        return "%s - %s (%s)" % (self.key, self.value, self.job_type)
+        return "%s - %s (%s)" % (self.key, self.value, self.job)
