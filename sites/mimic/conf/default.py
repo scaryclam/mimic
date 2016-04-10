@@ -36,6 +36,8 @@ INSTALLED_APPS = (
     'apps.user',
     'apps.consumer',
     'apps.producer',
+    'apps.agent',
+    'apps.job',
 )
 
 MIDDLEWARE_CLASSES = (

@@ -7,7 +7,7 @@ from apps import views
 
 urlpatterns = [
     url(r'^$', views.IndexView.as_view(), name="home"),
-    url(r'agent', include('apps.agent.urls', namespace="agent")),
+    url(r'agent/', include('apps.agent.urls', namespace="agent")),
     url(r'^admin/', include(admin.site.urls)),
 ]
 

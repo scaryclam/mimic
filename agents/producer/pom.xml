@@ -13,6 +13,7 @@
         <cli.version>1.2</cli.version>
         <aws.java.sdk.version>1.10.1</aws.java.sdk.version>
         <velocity.version>1.7</velocity.version>
+        <apache-httpclient.version>4.5.2</apache-httpclient.version>
 	</properties>
     <dependencies>
         <dependency>
@@ -51,6 +52,12 @@
 			<artifactId>velocity</artifactId>
 			<version>${velocity.version}</version>
 		</dependency>
+		<dependency>
+	        <groupId>org.apache.httpcomponents</groupId>
+	        <artifactId>httpclient</artifactId>
+	        <version>${apache-httpclient.version}</version>
+        </dependency>
+		
 	</dependencies>
 	<build>
 		<plugins>

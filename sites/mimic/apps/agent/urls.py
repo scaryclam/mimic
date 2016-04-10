@@ -7,4 +7,5 @@ from apps.agent import views
 
 urlpatterns = patterns('',
     url(r'register', csrf_exempt(views.AgentRegisterView.as_view()), name='register'),
+    url(r'jobs/request', views.AgentJobsRequestView.as_view(), name='request_jobs'),
 )
