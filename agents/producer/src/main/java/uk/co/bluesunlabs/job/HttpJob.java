@@ -2,6 +2,7 @@ package uk.co.bluesunlabs.job;
 
 import java.io.IOException;
 import java.util.Map;
+import java.util.concurrent.Future;
 
 import org.apache.http.HttpResponse;
 import org.apache.http.client.ClientProtocolException;
@@ -14,6 +15,7 @@ import com.json.JSONObject;
 
 public class HttpJob implements Job {
 	private String jobName;
+	private String jobId;
 	private String targetURI;
 	private String targetMethod;
 	private String targetPayload;
@@ -29,6 +31,7 @@ public class HttpJob implements Job {
 	
 	public HttpJob(JSONObject config) {
 		jobName = config.getString("name");
+		jobId = config.getString("job_id");
 		targetURI = config.getString("targetURI");
 		targetMethod = config.getString("targetMethod");
 		if (config.has("targetPayload")) {
@@ -62,12 +65,11 @@ public class HttpJob implements Job {
 	}
 
 	@Override
-	public void run() {
+	public String call() {
 		System.out.println("Running HTTP Job " + jobName);
 		try {
 			runJob();
 		} catch (HTTPMethodNotSupported | IOException e1) {
-			// TODO Auto-generated catch block
 			e1.printStackTrace();
 		}
 		try {
@@ -77,5 +79,11 @@ public class HttpJob implements Job {
 			
 		}
 		Thread.currentThread().interrupt();
+		return "Done";
+	}
+
+	@Override
+	public String getId() {
+		return jobId;
 	}
 }

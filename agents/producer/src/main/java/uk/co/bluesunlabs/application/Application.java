@@ -3,14 +3,24 @@ package uk.co.bluesunlabs.application;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.http.HttpResponse;
 import org.apache.http.NameValuePair;
+import org.apache.http.client.ClientProtocolException;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.methods.HttpGet;
@@ -32,8 +42,12 @@ public class Application {
 	private Integer serverPort = 8877;
 	private static String agentId;
 	private Boolean isRegistered = false;
-	private JSONArray agentJobs;
+	private HashMap<String, JSONObject> agentJobs;
+	private HashMap<Future, Job> runningJobs;
+	private HashMap<String, Job> cleanupJobs;
 	private static final String[] acceptedJobTypes = new String[]{"http_producer", "rabbit_producer"};
+	private Integer requestDelay = 10;
+	private Integer checkDelay = 2;
 	
 	private class NoJobsException extends Exception {
 		private static final long serialVersionUID = -8115941090831065970L;
@@ -82,7 +96,7 @@ public class Application {
 		System.out.println("Registered as " + agentId);
 	}
 	
-	private void requestJobs() throws IOException, JSONException, NoJobsException, URISyntaxException {
+	private JSONArray requestJobs() throws IOException, JSONException, NoJobsException, URISyntaxException {
 		String targetUrl = "http://" + serverHost + ":" + serverPort + "/agent/jobs/request";  
 		System.out.println("Target url: " + targetUrl);
 		URI url = new URI(targetUrl);
@@ -109,12 +123,21 @@ public class Application {
 		try {
 			JSONObject jobsData = new JSONObject(result.toString());
 			JSONArray jobs = jobsData.getJSONArray("jobs");
+			JSONArray newJobs = new JSONArray();
 			
 			if (jobs.length() < 1) {
 				System.out.println("No jobs found, will retry later");
 				throw new NoJobsException("No jobs found");
 			} else {
-				agentJobs = jobs; 
+				for (int index = 0; index < jobs.length(); index++) {
+					JSONObject jobConfig = jobs.getJSONObject(index);
+					String jobId = jobConfig.getString("job_id");
+					if (!agentJobs.containsKey(jobId)) {
+						agentJobs.put(jobId, jobConfig);
+						newJobs.put(jobConfig);
+					}
+				}
+				return newJobs;
 			}
 			
 		} catch (JSONException error) {
@@ -122,21 +145,122 @@ public class Application {
 		}
 	}
 	
-	private void run() {
+	private void startJobs(JSONArray jobs) {
 		// For each job in agentJobs, pull out the config, create a new job, and set a worker running the job
 		JobFactory factory = new JobFactory();
-		for (int index = 0; index < agentJobs.length(); index++) {
-            JSONObject jobConfig = agentJobs.getJSONObject(index);
-			Job job = factory.getJob(jobConfig);
-			Thread thread = new Thread(job);
+		
+		for (int index = 0; index < jobs.length(); index++) {
+            JSONObject jobConfig = jobs.getJSONObject(index);
+            Job job = factory.getJob(jobConfig);
+            
+            ExecutorService executor = Executors.newFixedThreadPool(2);
+            Future<String> future = executor.submit(job);
+            
+            runningJobs.put(future, job);
+			
+			Thread thread = new Thread();
 			thread.start();
 		}
 	}
+	
+	private void cleanUpJob(Job job) throws URISyntaxException, ClientProtocolException, IOException {
+		cleanupJobs.put(job.getId(), job);
+		String targetUrl = "http://" + serverHost + ":" + serverPort + "/job/release/";  
+		System.out.println("Target url: " + targetUrl);
+		URI url = new URI(targetUrl);
+		HttpClient client = HttpClientBuilder.create().build();
+		HttpPost post = new HttpPost(url);
+		
+		post.setHeader("User-Agent", USER_AGENT);
+		List<NameValuePair> urlParameters = new ArrayList<NameValuePair>();
+		urlParameters.add(new BasicNameValuePair("job_id", job.getId()));
+		
+		post.setEntity(new UrlEncodedFormEntity(urlParameters));
+
+		HttpResponse response = client.execute(post);
+
+		BufferedReader in = new BufferedReader(
+		    new InputStreamReader(response.getEntity().getContent()));
+		String inputLine;
+		StringBuffer result = new StringBuffer();
+
+		while ((inputLine = in.readLine()) != null) {
+			result.append(inputLine);
+		}
+		System.out.println(response.toString());
+		in.close();
+		agentJobs.remove(job.getId());
+		cleanupJobs.remove(job.getId());
+	}
+	
+	private void checkJobs() throws InterruptedException, ExecutionException, ClientProtocolException, URISyntaxException, IOException {
+		// Create as a separate object as we'll want to modify runningJobs
+		HashMap<Future, Job> currentjobs = (HashMap<Future, Job>) runningJobs.clone();
+		
+		for (Map.Entry<Future, Job> entry : currentjobs.entrySet()) {
+			Future future = entry.getKey();
+            // Check if the job has finished
+			if (future.isDone()) {
+				// Shut down and pop off of the runningJobs
+				String result = (String) future.get();
+				runningJobs.remove(future);
+				Job job = entry.getValue();
+				cleanUpJob(job);
+			}
+		}
+	}
+	
+	private void run() throws InterruptedException, ExecutionException {
+		Runnable getJobsRunnable = new Runnable() {
+	        public void run() {
+	        	JSONArray jobs;
+				try {
+					jobs = getJobs();
+					startJobs(jobs);
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				}
+	        }
+	    };
+	    
+	    Runnable checkJobsRunnable = new Runnable() {
+	        public void run() {
+	        	try {
+					checkJobs();
+				} catch (InterruptedException | ExecutionException | URISyntaxException | IOException e) {
+					e.printStackTrace();
+				}
+	        }
+	    };
+	    
+	    ScheduledExecutorService service = Executors.newSingleThreadScheduledExecutor();
+        service.scheduleAtFixedRate(getJobsRunnable, 0, requestDelay, TimeUnit.SECONDS);
+        service.scheduleAtFixedRate(checkJobsRunnable, 0, checkDelay, TimeUnit.SECONDS);
+
+	}
+	
+	private JSONArray getJobs() throws InterruptedException {
+		while(true) {
+		    try {
+		    	System.out.println("Requesting jobs");
+		    	JSONArray jobs = requestJobs();
+		    	return jobs;
+		    } catch (NoJobsException|IOException|JSONException|URISyntaxException err) {
+				System.out.println("Caught exception, sleeping before retry...");
+				System.out.println("Exception was " + err);
+				Thread.sleep(10000);
+			}
+		}
+	}
 			
-	public static void main(String[] args) throws InterruptedException, JSONException, IOException {
+	public static void main(String[] args) throws InterruptedException, JSONException, IOException, ExecutionException {
 		System.out.println("Starting...");
 		agentId = UUID.randomUUID().toString();
 		Application agent = new Application();
+		agent.runningJobs = new HashMap<Future, Job>();
+		agent.agentJobs = new HashMap<String, JSONObject>();
+		agent.cleanupJobs = new HashMap<String, Job>();
+		
 		while(true) {
 			try {
 				System.out.println("Attempting to register");
@@ -147,17 +271,7 @@ public class Application {
 				Thread.sleep(5000);
 			}
 		}
-		while(true) {
-		    try {
-		    	System.out.println("Requesting jobs");
-		    	agent.requestJobs();
-		    	break;
-		    } catch (NoJobsException|IOException|JSONException|URISyntaxException err) {
-				System.out.println("Caught exception, sleeping before retry...");
-				System.out.println("Exception was " + err);
-				Thread.sleep(10000);
-			}
-		}
+		
 		agent.run();
 		System.out.println("Goodbye");
 	}

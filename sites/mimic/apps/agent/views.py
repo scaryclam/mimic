@@ -53,7 +53,8 @@ class AgentJobsRequestView(View):
 
         for job in assigned_jobs:
             job_data = {'name': job.name,
-                        'job_type': job.job_type.name}
+                        'job_type': job.job_type.name,
+                        'job_id': job.job_id}
 
             for job_meta in job.jobmeta_set.all():
                 job_data[job_meta.key] = job_meta.value
